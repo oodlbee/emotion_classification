@@ -1,30 +1,29 @@
-import os
 import cv2
-import pathlib
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import face_recognition as fr
 
 
-def get_list_of_files(dirName):
+def get_list_of_files(dir_path):
     """Makes a list of strings of file's paths from directiory"""
-    listOfFile = os.listdir(dirName)            # Сделать через pathlib
-    allFiles = list()
-    for entry in listOfFile:
-        fullPath = os.path.join(dirName, entry)
-        if os.path.isdir(fullPath):
-            allFiles = allFiles + get_list_of_files(fullPath)
+    list_of_file = Path.iterdir(dir_path)           
+    all_files = []
+    for file in list_of_file:
+        full_path = dir_path.joinpath(file)
+        if Path.is_dir(full_path):
+            all_files = all_files + get_list_of_files(full_path)
         else:
-            allFiles.append(fullPath)             
-    return allFiles
+            all_files.append(full_path)             
+    return all_files
 
 
 def image_pre_processing(data, sigma_GF, IMG_HEIGHT, IMG_WIDTH):
     """Applies Gaussian filter to remove noise, applies histogram 
     equalisation and scales image to convert all data to a common format"""
     X = []
-    for image in data: 
-        image = cv2.imread(image)
+    for path in data:
+        image = cv2.imread(str(path))
 
         image_GF = cv2.GaussianBlur(image, (5, 5), sigma_GF)    # Gaussian filter
 
@@ -52,42 +51,41 @@ def image_pre_processing(data, sigma_GF, IMG_HEIGHT, IMG_WIDTH):
 def save_images(images_array, save_path, target_df):
     """Saves processed images to directory"""
     try: 
-        os.mkdir(save_path) 
+        Path.mkdir(save_path) 
     except OSError as er: 
         pass 
     for i, image in enumerate(images_array):
         name = target_df.iloc[i]['name']
         path = str(save_path.joinpath(name))
         cv2.imwrite(path, image)
+    target_df.to_csv(save_path.parent.joinpath('df_target.csv'))
 
 
 def make_target_df(target_folder, files_list):
     """Makes from dataset description target csv file"""
     df_target = pd.read_csv(target_folder) 
     df_target = df_target.drop(columns=['Unnamed: 0'], axis=1)
+    
     label_list = []
     name_list = []
     for file in files_list:
-        pic_name = file.split('\\')[-1]                    # Сделать через pathlib       
+        pic_name = file.name      
         idx = df_target[df_target['file name'] == pic_name].index
         label_list.append(df_target.at[idx[0], 'label'])
         name_list.append(pic_name)
     dic = {'name':name_list,'label':label_list}
     df_target = pd.DataFrame(dic)
-    path = target_folder.parents[0].joinpath('df_target.csv')
-    df_target.to_csv(path)
-
     return df_target
 
 
 if __name__ == '__main__':
-    read_folder = pathlib.PurePath('F:/projects/vs_code/emoji_classification/all')
-    target_folder = pathlib.PurePath('F:/projects/vs_code/emoji_classification/label_dataset.csv')
-
+    project_folder =  Path().resolve()
+    read_folder = project_folder.joinpath('data/raw/images')
+    target_path = project_folder.joinpath('data/raw/label_dataset.csv')
+    write_folder = project_folder.joinpath('data/processed/images')
+    
     img_files_list = get_list_of_files(read_folder)
-
-    target_df = make_target_df(target_folder, img_files_list)
+    target_df = make_target_df(target_path, img_files_list)
     X_processed = image_pre_processing(img_files_list, 1, 64, 64)
-
-    write_folder = read_folder.parents[0].joinpath('processed')
+    
     save_images(X_processed, write_folder, target_df)
