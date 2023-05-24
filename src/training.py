@@ -7,7 +7,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.metrics import classification_report
+from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import confusion_matrix
+from sklearn.svm import SVC
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from preprocessing import get_list_of_files
 
@@ -47,13 +49,15 @@ def lda_classification(X_featured, df_target, write_folder):
     """Splits data on train and test. The number of classes is uneven
     (there are too many neutral class),so we use upsampling for train data.
     We dont use upsampling for test data to avoid copied images that can
-    influence result score. Than we use PCA to reduce data dimension and finaly
-    LDA for classification"""
+    influence result score. Than we use PCA + LDA to reduce data dimension and finaly
+    SVM for classification. During experiments in notebook 
+    (/notebooks/emotion_classification.ipybn), SVM showed the best results in classification"""
 
     y = np.array(df_target.label)
     X_train, X_test, y_train, y_test = train_test_split(X_featured, y,
                                                         test_size=0.2)
 
+    # upsampling
     labeled_df = pd.DataFrame(data=X_train)
     labeled_df['label'] = y_train
 
@@ -62,43 +66,54 @@ def lda_classification(X_featured, df_target, write_folder):
     upsample.columns = labeled_df.columns
     resampled_df = pd.concat([labeled_df[labeled_df.label == 0], upsample], ignore_index=True)
 
-    downsample = resampled_df[resampled_df.label == 0]
-    drop_indices = np.random.choice(downsample.index, int(len(downsample)/2), replace=False)
-    resampled_df = resampled_df.drop(drop_indices)
+    # downsample = resampled_df[resampled_df.label == 0]
+    # drop_indices = np.random.choice(downsample.index, int(len(downsample)/2), replace=False)
+    # resampled_df = resampled_df.drop(drop_indices)
 
-    resampled_df.label.value_counts()
-    resampled_df = resampled_df.reset_index(drop=True)
-    
+    resampled_df = resampled_df.reset_index(drop=True)    
 
     y_train = resampled_df.label
     X_train = resampled_df.drop('label', axis=1)
 
+    # PCA + LDA to dimensionality reduction
     scaler = StandardScaler()
     scaler.fit(X_train)
     X_train_scaled = scaler.transform(X_train)
+
     pca = PCA(0.95)
     pca.fit(X_train_scaled)
     x_train_pca = pca.transform(X_train_scaled)
-    data_pca = pd.DataFrame(data=x_train_pca)
-    X_train = data_pca
+    X_train = pd.DataFrame(data=x_train_pca)
 
     scaler = StandardScaler()
     scaler.fit(X_test)
     X_test_scaled = scaler.transform(X_test)
     x_test_pca = pca.transform(X_test_scaled)
-    data_pca = pd.DataFrame(data=x_test_pca)
-    X_test = data_pca
+    X_test = pd.DataFrame(data=x_test_pca)
 
     LDA_model = LinearDiscriminantAnalysis()
     LDA_model.fit(X_train, y_train)
-    LDA_prediction = LDA_model.predict(X_test)
 
-    LDA_train_accuracy = LDA_model.score(X_train, y_train)
-    LDA_test_accuracy = LDA_model.score(X_test, y_test)
-    conf_matrix = confusion_matrix(LDA_prediction, y_test)
-    report = classification_report(y_test, LDA_model.predict(X_test),
-                                   output_dict=True)
+    x_train_lda = LDA_model.transform(X_train)
+    X_train = pd.DataFrame(data=x_train_lda)
+    x_test_lda = LDA_model.transform(x_test_pca)
+    X_test = pd.DataFrame(data=x_test_lda)
+
+    # SVM classification
+    clf = SVC()
+    params = {'C': [1, 10, 100, 1000], 'gamma': [1, 0.1, 0.001, 0.0001], 'degree': range(1, 15), 'kernel': ['linear', 'rbf']}
+    search = GridSearchCV(clf, params, scoring="f1_weighted", cv=5, n_jobs=-1)
+    search.fit(x_train_lda, y_train)
+
+    SVC_model = search.best_estimator_
+    SVC_model.fit(x_train_lda, y_train)
+    SVC_prediction = SVC_model.predict(x_test_lda) 
+
+    report = classification_report(y_test, SVC_prediction, output_dict=True)
+    conf_matrix = confusion_matrix(SVC_prediction, y_test)
+    df_conf_matrix = pd.DataFrame(conf_matrix)
     df_report = pd.DataFrame(report).transpose()
+
 
     with open(write_folder.joinpath('pca.pkl'), 'wb') as f:
         pickle.dump(pca, f)
@@ -106,11 +121,15 @@ def lda_classification(X_featured, df_target, write_folder):
     with open(write_folder.joinpath('lda_model.pkl'), 'wb') as f:
         pickle.dump(LDA_model, f)
 
-    return df_report, conf_matrix, LDA_train_accuracy, LDA_test_accuracy
+    with open(write_folder.joinpath('svd_model.pkl'), 'wb') as f:
+        pickle.dump(SVC_model, f)
+
+    df_report.to_excel(write_folder.joinpath('classification_report.xlsx'))
+    df_conf_matrix.to_excel(write_folder.joinpath('confusion_matrix.xlsx'))
 
 
 if __name__ == "__main__":
-    project_folder = Path().resolve()
+    project_folder = Path(__file__).parents[1].resolve()
     image_folder = project_folder.joinpath('data/processed/images')
     target_path = project_folder.joinpath('data/processed/df_target.csv')
     write_folder = project_folder.joinpath('models')
@@ -129,4 +148,5 @@ if __name__ == "__main__":
     filters = gabor_filters_features(ksize, sigma, theta_range,
                                      lamda, gamma, phi)
     X_featured = apply_filter(img_files_list, filters)
-    print(lda_classification(X_featured, df_target, write_folder))
+
+    lda_classification(X_featured, df_target, write_folder)
