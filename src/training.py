@@ -129,6 +129,7 @@ def lda_classification(X_featured, df_target, write_folder):
 
 
 if __name__ == "__main__":
+
     project_folder = Path(__file__).parents[1].resolve()
     image_folder = project_folder.joinpath('data/processed/images')
     target_path = project_folder.joinpath('data/processed/df_target.csv')
