@@ -1,3 +1,7 @@
+"""
+Script for training emotion classification model with
+PCA + LDA to reduce dimentions and SVM model for classification.
+"""
 import cv2
 import pickle
 import numpy as np
@@ -85,8 +89,6 @@ def lda_classification(X_featured, df_target, write_folder):
     x_train_pca = pca.transform(X_train_scaled)
     X_train = pd.DataFrame(data=x_train_pca)
 
-    scaler = StandardScaler()
-    scaler.fit(X_test)
     X_test_scaled = scaler.transform(X_test)
     x_test_pca = pca.transform(X_test_scaled)
     X_test = pd.DataFrame(data=x_test_pca)
@@ -114,6 +116,12 @@ def lda_classification(X_featured, df_target, write_folder):
     df_conf_matrix = pd.DataFrame(conf_matrix)
     df_report = pd.DataFrame(report).transpose()
 
+
+    with open(write_folder.joinpath('scaler.pkl'), 'wb') as f:
+        pickle.dump(scaler, f)
+
+    with open(write_folder.joinpath('pca.pkl'), 'wb') as f:
+        pickle.dump(pca, f)
 
     with open(write_folder.joinpath('pca.pkl'), 'wb') as f:
         pickle.dump(pca, f)
