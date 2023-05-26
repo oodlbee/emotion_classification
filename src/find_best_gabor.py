@@ -39,8 +39,7 @@ def find_optimal(img_files_list, df_target):
 
 
 if __name__ == "__main__":
-
-    project_folder = Path().resolve()
+    project_folder = Path(__file__).parents[1].resolve()
     image_folder = project_folder.joinpath('data/processed/images')
     target_path = project_folder.joinpath('data/processed/df_target.csv')
     img_files_list = get_list_of_files(image_folder)

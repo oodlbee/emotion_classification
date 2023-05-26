@@ -79,7 +79,7 @@ def make_target_df(target_folder, files_list):
 
 
 if __name__ == '__main__':
-    project_folder =  Path().resolve()
+    project_folder = Path(__file__).parents[1].resolve()
     read_folder = project_folder.joinpath('data/raw/images')
     target_path = project_folder.joinpath('data/raw/label_dataset.csv')
     write_folder = project_folder.joinpath('data/processed/images')
